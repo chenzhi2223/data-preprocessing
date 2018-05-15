@@ -1,1 +1,1 @@
-Here some examples using torchvision in pytroch for data preprocessing is presented, such as for cifar, mnist, as well as svhn. Feel free to use them for your academic or project usage. Some preprocessing techniques are implemented, such as whitening.
+Here some examples using torchvision in pytroch for data preprocessing is presented, such as for cifar, mnist, as well as svhn. Feel free to use them for your academic or project usage. Some preprocessing techniques are implemented, e.g., ZCA whitening, which is proved to improve the accuracy in classification of such datasets.
