@@ -5,15 +5,13 @@ This is a temporary script file.
 """
 
 import torch
-#import cifar
+import cifar
 import torchvision
 import torchvision.transforms as transforms
 import timeit
 import math
 import numpy as np
-#from scipy import linalg
 import gc
-#from PIL import Image, ImageOps, ImageEnhance
 
 def compute_mean_var(data,list_mean,list_var):
     bn_numpy = data.cpu().numpy()
@@ -42,26 +40,11 @@ def reduce_mean_var(list_mean,list_var, batchSize):
         running_var += item / length
     running_var *= batchSize / (batchSize - 1)
     return running_mean, running_var
-        
-        
 
 def net_eval(net):
     net = net.train()
     for name, module in net.named_modules():
         if 'drop' in name:
-            """
-            set dropout layer in eval() mode.
-            """
-            """
-            while the batchNorm layer is difficult to be handled for accuracy.
-            """
-            module.eval()
-    return net
-
-def net_freeze(net):
-    net = net.train()
-    for name, module in net.named_modules():
-        if 'grelu' in name:
             """
             set dropout layer in eval() mode.
             """
@@ -78,9 +61,6 @@ def test(net, criterion, testLoader):
     total = 0
     test_loss = 0
     minibatch = 0
-    #class_correct = list(0. for i in range(10))
-    #class_total = list(0. for i in range(10))
-    #net.eval()
     for data in testLoader:
         images, labels = data
         images, labels = Variable(images), Variable(labels)
@@ -91,15 +71,6 @@ def test(net, criterion, testLoader):
         _, predicted = torch.max(outputs.data, 1)
         total += labels.data.size(0)
         correct += (predicted == labels.data).sum()
-        #c = (predicted == labels.data).squeeze()
-        """
-        for i in range(100):
-            label = labels.data[i].cpu()
-            class_correct[label] += c[i].cpu()
-            class_total[label] += 1
-        """
-    #print(total)
-    #print(minibatch*100)
     test_loss /= minibatch
     test_rate = 100. * correct / total
     print('Accuracy of the network on the %f test images: %f %%' % (
@@ -115,7 +86,6 @@ import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.utils as u
 import torch.nn.functional as F
-from GreluModule import GreluModule as grelu
 
 """
 data loader
@@ -186,7 +156,6 @@ class Net(nn.Module):
         self.bn11 = nn.BatchNorm2d(96)
         self.bn11_mean = list()
         self.bn11_var = list()
-        #self.bn13 = nn.BatchNorm2d(128)
         self.bn12 = nn.BatchNorm2d(96)
         self.bn12_mean = list()
         self.bn12_var = list()
@@ -195,12 +164,11 @@ class Net(nn.Module):
         only apply maxPool on the first pooling layer.
         """
         self.pool2 = nn.MaxPool2d(3, 2, 1)
-        #self.pool2 = nn.AvgPool2d(3, 2, 1)
         self.avg1 = nn.AvgPool2d(4, 4)
         self.avg2 = nn.AvgPool2d(2, 2)
         self.conv2 = u.weight_norm(nn.Conv2d(96, 96, 3, padding=1, bias=False),name='weight')
         init.kaiming_normal(self.conv2.weight,a=0.0,mode='fan_in')
-        self.conp2 = u.weight_norm(nn.Conv2d(96 + 96, 96, 1, bias=False),name='weight')
+        self.conp2 = u.weight_norm(nn.Conv2d(96, 96, 1, bias=False),name='weight')
         init.kaiming_normal(self.conp2.weight,a=0.00,mode='fan_in')
         self.bn21 = nn.BatchNorm2d(96)
         self.bn21_mean = list()
@@ -210,7 +178,7 @@ class Net(nn.Module):
         self.bn22_var = list()
         self.conv3 = u.weight_norm(nn.Conv2d(96, 96, 3, padding=1, bias=False),name='weight')
         init.kaiming_normal(self.conv3.weight,a=0.0,mode='fan_in')
-        self.conp3 = u.weight_norm(nn.Conv2d(96 + 96, 96, 1, bias=False),name='weight')
+        self.conp3 = u.weight_norm(nn.Conv2d(96, 96, 1, bias=False),name='weight')
         init.kaiming_normal(self.conp3.weight,a=0.0,mode='fan_in')
         self.bn31 = nn.BatchNorm2d(96)
         self.bn32 = nn.BatchNorm2d(96)
@@ -219,18 +187,12 @@ class Net(nn.Module):
         self.bn32_mean = list()
         self.bn32_var = list()
         #self.avg3 = nn.AvgPool2d(4,4)
-        self.fc = u.weight_norm(nn.Conv2d( ( 96 + 96 + 96 ), 10, 1, bias=False),name='weight')
+        self.fc = u.weight_norm(nn.Conv2d( 96, 10, 1, bias=False),name='weight')
         init.kaiming_normal(self.fc.weight,a=0.00,mode='fan_in')
         self.bn = nn.BatchNorm2d(10)
         self.bn_mean = list()
         self.bn_var = list()
         self.gap = nn.AvgPool2d(7,7)
-        self.grelu1 = grelu(2)
-        self.grelu2 = grelu(2)
-        self.grelu3 = grelu(2)
-        self.grelu4 = grelu(2)
-        self.grelu5 = grelu(2)
-        self.grelu6 = grelu(2)
     def reduce_bn_statistics(self,batchSize):
         if self.infer == 2:
             self.bn11.running_mean,self.bn11.running_var = reduce_mean_var(self.bn11_mean,self.bn11_var, batchSize)
@@ -258,18 +220,16 @@ class Net(nn.Module):
         x1 = self.conv1(x)
         if self.infer == 1:
             compute_mean_var(x1.data,self.bn11_mean,self.bn11_var)
-        x1 = self.grelu1(self.bn11(x1))
+        x1 = F.relu(self.bn11(x1))
         x1 = self.dropConv1(x1)
         x1 = self.conp1(x1)
         if self.infer == 1:
             compute_mean_var(x1.data,self.bn12_mean,self.bn12_var)
         x1 = self.dropConp1(F.relu(self.bn12(x1)))
-        x1a = self.avg1(x1)
         """
         pooling
         """
         x2 = self.pool1(x1)
-        x2_cat = x2
         """
         block 2
         """
@@ -278,14 +238,7 @@ class Net(nn.Module):
         if self.infer == 1:
             compute_mean_var(x2.data,self.bn21_mean,self.bn21_var)
         
-        x2 = self.grelu3(self.bn21(x2))
-        """
-        Applies Dense Operation to sufficiently retain information flows from lower layers.
-        It seems better to cat feature maps then 
-        dropout to
-        avoid overfitting.
-        """
-        x2 = torch.cat((x2_cat,x2),1)
+        x2 = F.relu(self.bn21(x2))
         x2 = self.conp2(self.dropConv2(x2))
         
         if self.infer == 1:
@@ -296,7 +249,6 @@ class Net(nn.Module):
         """
         pooling
         """
-        x2a = self.avg2(x2)
         x3 = self.pool2(x2)
         x3_cat = x3
         """
@@ -307,8 +259,7 @@ class Net(nn.Module):
         if self.infer == 1:
             compute_mean_var(x3.data,self.bn31_mean,self.bn31_var)
         
-        x3 = self.grelu5(self.bn31(x3))
-        x3 = torch.cat((x3_cat,x3),1)
+        x3 = F.relu(self.bn31(x3))
         x3 = self.dropConv3(x3)
         x3 = self.conp3(x3)
         
@@ -317,20 +268,6 @@ class Net(nn.Module):
         
         x3 = F.relu(self.bn32(x3))
         x3 = self.dropConp3(x3)
-        """
-        Now catenate the features together before 
-        pooling and generate NumOfClass feature maps 
-        for global average pooling.
-        """
-        #x3 = self.avg3(x3)
-        """
-        Final layer
-        """
-        #x1a = x1a.view(-1, 128 * 2 * 2)
-        #x2a = x2a.view(-1, 160 * 2 * 2)
-        #x3 = x3.view(-1, 192 * 2 *2)
-        x4 = torch.cat((x1a, x2a, x3), 1)
-        #x4 = self.dropFC(x4)
         x5 = self.fc(x4)
         
         if self.infer == 1:
@@ -355,29 +292,12 @@ class Net(nn.Module):
     
 if __name__ == '__main__':
     gc.enable()
-    """
-    normalize it into a standard nrom N(0,1) distribution.
-    """
-    classes = ('plane', 'car', 'bird', 'cat',
-               'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-    import matplotlib.pyplot as plt
-    #import numpy as np
     
     # functions to show an image
     def imshow(img):
         #img = img / 2 + 0.5     # unnormalize
         npimg = img.numpy()
         plt.imshow(np.transpose(npimg, (1, 2, 0)))
-    
-    # get some random training images
-    #dataiter = iter(trainloader)
-    #images, labels = dataiter.next()
-    
-    # show images
-    #imshow(torchvision.utils.make_grid(images))
-    # print labels
-    #print(' '.join('%5s' % classes[labels[j]] for j in range(10)))
-    """
     Create an instance.
     """
     net = Net()
